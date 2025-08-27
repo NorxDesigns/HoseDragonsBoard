@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fantasy Draft Board</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9; /* slate-100 */
+        }
+        .grid-container {
+            display: grid;
+            grid-template-columns: 80px repeat(12, minmax(0, 1fr));
+            gap: 1px;
+            background-color: #d1d5db; /* gray-300 for grid lines */
+            border: 1px solid #d1d5db;
+        }
+        .grid-header {
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+            font-weight: 600;
+            padding: 0.75rem;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .round-header {
+            background-color: #cbd5e1; /* slate-300 */
+            color: #1f2937; /* gray-800 */
+            font-weight: 600;
+            padding: 0.75rem;
+            text-align: center;
+            position: sticky;
+            left: 0;
+            z-index: 5;
+        }
+        .grid-cell {
+            background-color: white;
+            padding: 0.5rem;
+            text-align: center;
+            position: relative;
+        }
+        .grid-cell.alt-bg {
+            background-color: #e5e7eb; /* gray-200 */
+        }
+        .player-input {
+            width: 100%;
+            height: 100%;
+            border: none;
+            outline: none;
+            background-color: transparent;
+            font-size: 0.875rem;
+            color: #1e293b;
+            text-align: center;
+        }
+        .player-input:focus {
+            background-color: #f3f4f6; /* gray-100 */
+        }
+        .pick-number {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #4b5563;
+            margin-top: 0.25rem;
+        }
+        .cell-pick-number {
+            position: absolute;
+            top: 0.25rem;
+            left: 0.25rem;
+            font-size: 0.5rem;
+            font-weight: bold;
+            color: #ef4444; /* red-500 */
+        }
+        .owning-team {
+            position: absolute;
+            bottom: 0.25rem;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.5rem;
+            font-weight: bold;
+            color: #3b82f6; /* blue-500 */
+            width: 80%;
+            text-align: center;
+            border: none;
+            outline: none;
+            background-color: transparent;
+            padding: 0;
+        }
+        .owning-team:focus {
+            background-color: #e2e8f0;
+        }
+        .scroll-container::-webkit-scrollbar {
+            width: 10px;
+        }
+        .scroll-container::-webkit-scrollbar-track {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+        .scroll-container::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 10px;
+        }
+        .scroll-container::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <!-- Title and description -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">Fantasy Draft Board</h1>
+            <p class="text-lg text-gray-600">Track your snake draft picks in real-time.</p>
+        </header>
+
+        <!-- Main content area -->
+        <main class="flex flex-col lg:flex-row gap-8">
+            <!-- Draft Board Section -->
+            <div id="draft-board-container" class="lg:flex-1 p-6 bg-white shadow-lg rounded-xl overflow-x-auto scroll-container">
+                <div id="draft-board" class="grid-container">
+                    <!-- Grid headers for teams and rounds will be dynamically inserted here -->
+                </div>
+            </div>
+
+            <!-- Side Panel (Tools & Players) -->
+            <div class="w-full lg:w-96 flex flex-col gap-6">
+                <!-- Draft Tools -->
+                <div class="p-6 bg-white shadow-lg rounded-xl">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Draft Tools</h2>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <button id="save-btn" class="flex-1 py-3 px-6 bg-green-500 text-white font-medium rounded-lg shadow-md hover:bg-green-600 transition-colors">
+                            Save Progress
+                        </button>
+                        <button id="load-btn" class="flex-1 py-3 px-6 bg-blue-500 text-white font-medium rounded-lg shadow-md hover:bg-blue-600 transition-colors">
+                            Load Draft
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Available Players List -->
+                <div class="flex-1 p-6 bg-white shadow-lg rounded-xl flex flex-col">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Available Players</h2>
+                    <div class="mb-4">
+                        <input type="text" id="search-input" placeholder="Search players..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow">
+                    </div>
+                    <ul id="players-list" class="flex-1 overflow-y-auto scroll-container space-y-2">
+                        <!-- Player items will be dynamically inserted here -->
+                    </ul>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Message box for user feedback -->
+        <div id="message-box" class="fixed bottom-8 right-8 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-xl hidden transition-opacity duration-300">
+            <!-- Message will be displayed here -->
+        </div>
+    </div>
+
+    <script>
+        // --- Core Data and Configuration ---
+        const TEAMS = ['Heroes', 'Bad Decision', 'Every Given Sunday', 'MagsBroFest', 'Em Jayz', 'Breezers', 'Rooster', 'Whoosies', 'Chef', 'Eye of the Jew', 'HDFT', 'Mechanic'];
+        const TEAM_ABBREVIATIONS = {
+            'Heroes': 'HER',
+            'Bad Decision': 'BD',
+            'Every Given Sunday': 'EGS',
+            'MagsBroFest': 'MBF',
+            'Em Jayz': 'EJayz',
+            'Breezers': 'BRZ',
+            'Rooster': 'RST',
+            'Whoosies': 'WHO',
+            'Chef': 'CHF',
+            'Eye of the Jew': 'EOTJ',
+            'HDFT': 'HDFT',
+            'Mechanic': 'MEC'
+        };
+        const NUM_ROUNDS = 22;
+        const DRAFT_BOARD_KEY = 'fantasyDraftBoardData';
+        const PLAYERS_KEY = 'availablePlayers';
+
+        // Keepers data from the image provided
+        const KEEPERS = {
+            'pick-9': 'Ja\'Marr Chase',
+            'pick-12': 'Justin Jefferson',
+            'pick-17': 'Derrick Henry',
+            'pick-18': 'Jahmyr Gibbs',
+            'pick-22': 'Saquon Barkley',
+            'pick-36': 'Malik Nabers',
+            'pick-44': 'Tee Higgins',
+            'pick-52': 'Josh Allen',
+            'pick-56': 'Trey McBride',
+            'pick-67': 'Brian Thomas Jr',
+            'pick-70': 'Ladd McConkey',
+            'pick-71': 'Jameson Williams',
+            'pick-91': 'JSN',
+            'pick-100': 'Jerry Jeudy',
+            'pick-106': 'Chase Brown',
+            'pick-112': 'Jayden Daniels',
+            'pick-116': 'JK Dobbins',
+            'pick-120': 'Brock Bowers',
+            'pick-150': 'Bucky Irving',
+            'pick-168': 'Tyrone Tracy Jr'
+        };
+
+        // Traded picks data
+        const TRADED_PICKS = {
+            // Round 2
+            'pick-24': 'Eye of the Jew',
+
+            // Round 3
+            'pick-29': 'Heroes',
+            'pick-31': 'Breezers',
+            'pick-32': 'Heroes',
+
+            // Round 4
+            'pick-37': 'Heroes',
+            'pick-41': 'MagsBroFest',
+            'pick-42': 'MagsBroFest',
+            'pick-46': 'Eye of the Jew',
+            'pick-47': 'Chef',
+            
+            // Round 5
+            'pick-51': 'MagsBroFest',
+            'pick-57': 'Breezers',
+
+            // Round 6
+            'pick-66': 'Breezers',
+
+            // Round 7
+            'pick-74': 'Chef',
+
+            // Round 8
+            'pick-90': 'Rooster',
+
+            // Round 10
+            'pick-116': 'Heroes',
+
+            // Round 11
+            'pick-117': 'Whoosies',
+            'pick-124': 'Every Given Sunday',
+            'pick-126': 'Rooster',
+            'pick-129': 'Bad Decision',
+
+            // Round 12
+            'pick-130': 'Every Given Sunday',
+            'pick-139': 'Chef',
+            'pick-141': 'Rooster',
+
+            // Round 13
+            'pick-144': 'Mechanic',
+
+            // Round 14
+            'pick-145': 'Em Jayz',
+            'pick-160': 'Bad Decision',
+
+            // Round 15
+            'pick-168': 'Em Jayz',
+            'pick-169': 'Whoosies',
+            'pick-178': 'Heroes'
+        };
+
+        // --- DOM Elements ---
+        const draftBoardEl = document.getElementById('draft-board');
+        const playersListEl = document.getElementById('players-list');
+        const searchInputEl = document.getElementById('search-input');
+        const saveBtn = document.getElementById('save-btn');
+        const loadBtn = document.getElementById('load-btn');
+        const messageBox = document.getElementById('message-box');
+
+        // --- Data State ---
+        let draftedPlayers = {};
+        let availablePlayers = [];
+
+        // --- Utility Functions ---
+
+        /**
+         * Displays a temporary message to the user.
+         * @param {string} message The message to display.
+         * @param {number} duration The duration in milliseconds to show the message.
+         */
+        function showMessage(message, duration = 3000) {
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden', 'opacity-0');
+            messageBox.classList.add('opacity-100');
+            setTimeout(() => {
+                messageBox.classList.remove('opacity-100');
+                messageBox.classList.add('opacity-0');
+                setTimeout(() => messageBox.classList.add('hidden'), 300);
+            }, duration);
+        }
+
+        /**
+         * Converts a full team name to its abbreviation.
+         * @param {string} teamName The full team name.
+         * @returns {string} The abbreviated team name.
+         */
+        function getAbbreviatedTeamName(teamName) {
+            return TEAM_ABBREVIATIONS[teamName] || teamName;
+        }
+
+        /**
+         * Creates a dummy list of top 250 players and removes duplicates.
+         */
+        function initializePlayerList() {
+            // Check for existing players in local storage
+            const savedPlayers = JSON.parse(localStorage.getItem(PLAYERS_KEY));
+            if (savedPlayers && savedPlayers.length > 0) {
+                availablePlayers = savedPlayers;
+            } else {
+                const rawPlayers = [
+                  { name: 'Ja\'Marr Chase', pos: 'WR', team: 'Bengals' },
+                  { name: 'Bijan Robinson', pos: 'RB', team: 'Falcons' },
+                  { name: 'Jahmyr Gibbs', pos: 'RB', team: 'Lions' },
+                  { name: 'Saquon Barkley', pos: 'RB', team: 'Eagles' },
+                  { name: 'CeeDee Lamb', pos: 'WR', team: 'Cowboys' },
+                  { name: 'Justin Jefferson', pos: 'WR', team: 'Vikings' },
+                  { name: 'Malik Nabers', pos: 'WR', team: 'Giants' },
+                  { name: 'Nico Collins', pos: 'WR', team: 'Texans' },
+                  { name: 'Christian McCaffrey', pos: 'RB', team: '49ers' },
+                  { name: 'Amon-Ra St. Brown', pos: 'WR', team: 'Lions' },
+                  { name: 'Derrick Henry', pos: 'RB', team: 'Ravens' },
+                  { name: 'Puka Nacua', pos: 'WR', team: 'Rams' },
+                  { name: 'Bucky Irving', pos: 'RB', team: 'Buccaneers' },
+                  { name: 'Brian Thomas Jr', pos: 'WR', team: 'Jaguars' },
+                  { name: 'Drake London', pos: 'WR', team: 'Falcons' },
+                  { name: 'De\'Von Achane', pos: 'RB', team: 'Dolphins' },
+                  { name: 'A.J. Brown', pos: 'WR', team: 'Eagles' },
+                  { name: 'Brock Bowers', pos: 'TE', team: 'Raiders' },
+                  { name: 'Jonathan Taylor', pos: 'RB', team: 'Colts' },
+                  { name: 'Josh Jacobs', pos: 'RB', team: 'Packers' },
+                  { name: 'Chase Brown', pos: 'RB', team: 'Bengals' },
+                  { name: 'Ladd McConkey', pos: 'WR', team: 'Chargers' },
+                  { name: 'Trey McBride', pos: 'TE', team: 'Cardinals' },
+                  { name: 'Josh Allen', pos: 'QB', team: 'Bills' },
+                  { name: 'Kyren Williams', pos: 'RB', team: 'Rams' },
+                  { name: 'Lamar Jackson', pos: 'QB', team: 'Ravens' },
+                  { name: 'Tee Higgins', pos: 'WR', team: 'Bengals' },
+                  { name: 'Jaxon Smith-Njigba', pos: 'WR', team: 'Seahawks' },
+                  { name: 'George Kittle', pos: 'TE', team: '49ers' },
+                  { name: 'Jayden Daniels', pos: 'QB', team: 'Commanders' },
+                  { name: 'Tyreek Hill', pos: 'WR', team: 'Dolphins' },
+                  { name: 'Joe Burrow', pos: 'QB', team: 'Bengals' },
+                  { name: 'Jalen Hurts', pos: 'QB', team: 'Eagles' },
+                  { name: 'Garrett Wilson', pos: 'WR', team: 'Jets' },
+                  { name: 'Marvin Harrison Jr.', pos: 'WR', team: 'Cardinals' },
+                  { name: 'Mike Evans', pos: 'WR', team: 'Buccaneers' },
+                  { name: 'Davante Adams', pos: 'WR', team: 'Raiders' },
+                  { name: 'Stefon Diggs', pos: 'WR', team: 'Texans' },
+                  { name: 'James Cook', pos: 'RB', team: 'Bills' },
+                  { name: 'Tyjae Spears', pos: 'RB', team: 'Titans' },
+                  { name: 'Kenneth Walker III', pos: 'RB', team: 'Seahawks' },
+                  { name: 'Terry McLaurin', pos: 'WR', team: 'Commanders' },
+                  { name: 'Patrick Mahomes', pos: 'QB', team: 'Chiefs' },
+                  { name: 'Courtland Sutton', pos: 'WR', team: 'Broncos' },
+                  { name: 'David Montgomery', pos: 'RB', team: 'Lions' },
+                  { name: 'Sam LaPorta', pos: 'TE', team: 'Lions' },
+                  { name: 'DeVonta Smith', pos: 'WR', team: 'Eagles' },
+                  { name: 'Isiah Pacheco', pos: 'RB', team: 'Chiefs' },
+                  { name: 'Xavier Worthy', pos: 'WR', team: 'Chiefs' },
+                  { name: 'Rhamondre Stevenson', pos: 'RB', team: 'Patriots' },
+                  { name: 'Jaylen Waddle', pos: 'WR', team: 'Dolphins' },
+                  { name: 'Chris Olave', pos: 'WR', team: 'Saints' },
+                  { name: 'Brandon Aiyuk', pos: 'WR', team: '49ers' },
+                  { name: 'D.K. Metcalf', pos: 'WR', team: 'Seahawks' },
+                  { name: 'Amari Cooper', pos: 'WR', team: 'Texans' },
+                  { name: 'Michael Pittman Jr.', pos: 'WR', team: 'Colts' },
+                  { name: 'Zay Flowers', pos: 'WR', team: 'Ravens' },
+                  { name: 'George Pickens', pos: 'WR', team: 'Steelers' },
+                  { name: 'Deebo Samuel', pos: 'WR', team: '49ers' },
+                  { name: 'Cooper Kupp', pos: 'WR', team: 'Rams' },
+                  { name: 'Rome Odunze', pos: 'WR', team: 'Bears' },
+                  { name: 'D.J. Moore', pos: 'WR', team: 'Bears' },
+                  { name: 'Justin Herbert', pos: 'QB', team: 'Chargers' },
+                  { name: 'Caleb Williams', pos: 'QB', team: 'Bears' },
+                  { name: 'Kirk Cousins', pos: 'QB', team: 'Falcons' },
+                  { name: 'Drake Maye', pos: 'QB', team: 'Patriots' },
+                  { name: 'J.J. McCarthy', pos: 'QB', team: 'Vikings' },
+                  { name: 'Bo Nix', pos: 'QB', team: 'Broncos' },
+                  { name: 'C.J. Stroud', pos: 'QB', team: 'Texans' },
+                  { name: 'Kyler Murray', pos: 'QB', team: 'Cardinals' },
+                  { name: 'Dak Prescott', pos: 'QB', team: 'Cowboys' },
+                  { name: 'Trevor Lawrence', pos: 'QB', team: 'Jaguars' },
+                  { name: 'Jordan Love', pos: 'QB', team: 'Packers' },
+                  { name: 'Tua Tagovailoa', pos: 'QB', team: 'Dolphins' },
+                  { name: 'Jared Goff', pos: 'QB', team: 'Lions' },
+                  { name: 'Matthew Stafford', pos: 'QB', team: 'Rams' },
+                  { name: 'Will Levis', pos: 'QB', team: 'Titans' },
+                  { name: 'Anthony Richardson', pos: 'QB', team: 'Colts' },
+                  { name: 'Sam Howell', pos: 'QB', team: 'Seahawks' },
+                  { name: 'Russell Wilson', pos: 'QB', team: 'Steelers' },
+                  { name: 'Baker Mayfield', pos: 'QB', team: 'Buccaneers' },
+                  { name: 'Geno Smith', pos: 'QB', team: 'Seahawks' },
+                  { name: 'Derek Carr', pos: 'QB', team: 'Saints' },
+                  { name: 'Deshaun Watson', pos: 'QB', team: 'Browns' },
+                  { name: 'Daniel Jones', pos: 'QB', team: 'Giants' },
+                  { name: 'Justin Fields', pos: 'QB', team: 'Steelers' },
+                  { name: 'Breece Hall', pos: 'RB', team: 'Jets' },
+                  { name: 'Kenneth Walker III', pos: 'RB', team: 'Seahawks' },
+                  { name: 'Javonte Williams', pos: 'RB', team: 'Broncos' },
+                  { name: 'D\'Andre Swift', pos: 'RB', team: 'Bears' },
+                  { name: 'Aaron Jones', pos: 'RB', team: 'Vikings' },
+                  { name: 'James Conner', pos: 'RB', team: 'Cardinals' },
+                  { name: 'Chase Edmonds', pos: 'RB', team: 'Buccaneers' },
+                  { name: 'James Cook', pos: 'RB', team: 'Bills' },
+                  { name: 'Khalil Herbert', pos: 'RB', team: 'Bears' },
+                  { name: 'Tyler Allgeier', pos: 'RB', team: 'Falcons' },
+                  { name: 'Gus Edwards', pos: 'RB', team: 'Chargers' },
+                  { name: 'Roschon Johnson', pos: 'RB', team: 'Bears' },
+                  { name: 'Antonio Gibson', pos: 'RB', team: 'Patriots' },
+                  { name: 'Miles Sanders', pos: 'RB', team: 'Panthers' },
+                  { name: 'Jeff Wilson Jr.', pos: 'RB', team: 'Dolphins' },
+                  { name: 'Kareem Hunt', pos: 'RB', team: 'Browns' },
+                  { name: 'Ezekiel Elliott', pos: 'RB', team: 'Cowboys' },
+                  { name: 'Chuba Hubbard', pos: 'RB', team: 'Panthers' },
+                  { name: 'Devin Singletary', pos: 'RB', team: 'Giants' },
+                  { name: 'Dalvin Cook', pos: 'RB', team: 'Free Agent' },
+                  { name: 'Leonard Fournette', pos: 'RB', team: 'Free Agent' },
+                  { name: 'Jerick McKinnon', pos: 'RB', team: 'Free Agent' },
+                  { name: 'Travis Kelce', pos: 'TE', team: 'Chiefs' },
+                  { name: 'Mark Andrews', pos: 'TE', team: 'Ravens' },
+                  { name: 'Dalton Kincaid', pos: 'TE', team: 'Bills' },
+                  { name: 'Kyle Pitts', pos: 'TE', team: 'Falcons' },
+                  { name: 'Evan Engram', pos: 'TE', team: 'Jaguars' },
+                  { name: 'David Njoku', pos: 'TE', team: 'Browns' },
+                  { name: 'Cole Kmet', pos: 'TE', team: 'Bears' },
+                  { name: 'Pat Freiermuth', pos: 'TE', team: 'Steelers' },
+                  { name: 'Dallas Goedert', pos: 'TE', team: 'Eagles' },
+                  { name: 'Noah Fant', pos: 'TE', team: 'Seahawks' },
+                  { name: 'Hunter Henry', pos: 'TE', team: 'Patriots' },
+                  { name: 'Zach Ertz', pos: 'TE', team: 'Commanders' },
+                  { name: 'Isaiah Likely', pos: 'TE', team: 'Ravens' },
+                  { name: 'Juwan Johnson', pos: 'TE', team: 'Saints' },
+                  { name: 'Tyler Higbee', pos: 'TE', team: 'Saints' },
+                  { name: 'T.J. Hockenson', pos: 'TE', team: 'Vikings' },
+                  { name: 'Greg Dulcich', pos: 'TE', team: 'Broncos' },
+                  { name: 'Adam Trautman', pos: 'TE', team: 'Broncos' },
+                  { name: 'Christian Watson', pos: 'WR', team: 'Packers' },
+                  { name: 'Rome Odunze', pos: 'WR', team: 'Bears' },
+                  { name: 'Jaxon Smith-Njigba', pos: 'WR', team: 'Seahawks' },
+                  { name: 'Brian Thomas Jr', pos: 'WR', team: 'Jaguars' },
+                  { name: 'Marvin Harrison Jr.', pos: 'WR', team: 'Cardinals' },
+                  { name: 'Jayden Reed', pos: 'WR', team: 'Packers' },
+                  { name: 'Jaylen Waddle', pos: 'WR', team: 'Dolphins' },
+                  { name: 'Brandon Aiyuk', pos: 'WR', team: '49ers' },
+                  { name: 'George Pickens', pos: 'WR', team: 'Steelers' },
+                  { name: 'Zay Flowers', pos: 'WR', team: 'Ravens' },
+                  { name: 'Michael Pittman Jr.', pos: 'WR', team: 'Colts' },
+                  { name: 'Tyler Lockett', pos: 'WR', team: 'Seahawks' },
+                  { name: 'Calvin Ridley', pos: 'WR', team: 'Titans' },
+                  { name: 'Courtland Sutton', pos: 'WR', team: 'Broncos' },
+                  { name: 'Josh Downs', pos: 'WR', team: 'Colts' },
+                  { name: 'Romeo Doubs', pos: 'WR', team: 'Packers' },
+                  { name: 'Odell Beckham Jr.', pos: 'WR', team: 'Dolphins' },
+                  { name: 'Quentin Johnston', pos: 'WR', team: 'Chargers' },
+                  { name: 'Khalil Shakir', pos: 'WR', team: 'Bills' },
+                  { name: 'Jalen Tolbert', pos: 'WR', team: 'Cowboys' },
+                  { name: 'Michael Wilson', pos: 'WR', team: 'Cardinals' },
+                  { name: 'Elijah Moore', pos: 'WR', team: 'Browns' },
+                  { name: 'Skyy Moore', pos: 'WR', team: 'Chiefs' },
+                  { name: 'Christian Kirk', pos: 'WR', team: 'Jaguars' },
+                  { name: 'Rashod Bateman', pos: 'WR', team: 'Ravens' },
+                  { name: 'Mike Williams', pos: 'WR', team: 'Jets' }
+                ];
+                
+                // Use a Set to track unique player names
+                const uniquePlayers = new Set();
+                availablePlayers = [];
+
+                // Filter out duplicates and add to the new array
+                rawPlayers.forEach(player => {
+                    if (!uniquePlayers.has(player.name)) {
+                        uniquePlayers.add(player.name);
+                        availablePlayers.push(player);
+                    }
+                });
+
+                // Sort the unique players
+                availablePlayers.sort((a, b) => {
+                    if (a.pos !== b.pos) return a.pos.localeCompare(b.pos);
+                    if (a.team !== b.team) return a.team.localeCompare(b.team);
+                    const [aLast, aFirst] = a.name.split(' ').reverse();
+                    const [bLast, bFirst] = b.name.split(' ').reverse();
+                    if (aLast !== bLast) return aLast.localeCompare(bLast);
+                    return aFirst.localeCompare(bFirst);
+                });
+                
+                localStorage.setItem(PLAYERS_KEY, JSON.stringify(availablePlayers));
+            }
+        }
+        
+        /**
+         * Renders the list of available players based on a filter and drafted players.
+         * @param {string} filter The search filter.
+         */
+        function renderAvailablePlayers(filter = '') {
+            playersListEl.innerHTML = '';
+            
+            const draftedPlayerNames = new Set(Object.values(draftedPlayers));
+            const filteredPlayers = availablePlayers.filter(player =>
+                !draftedPlayerNames.has(player.name) && player.name.toLowerCase().includes(filter.toLowerCase())
+            );
+
+            if (filteredPlayers.length === 0 && filter) {
+                playersListEl.innerHTML = `<li class="text-gray-500 text-center py-4">No available players found matching your search.</li>`;
+            } else if (filteredPlayers.length === 0) {
+                 playersListEl.innerHTML = `<li class="text-gray-500 text-center py-4">No players remaining on the board.</li>`;
+            } else {
+                filteredPlayers.forEach(player => {
+                    const playerItem = document.createElement('li');
+                    playerItem.className = 'p-3 bg-gray-100 rounded-md text-gray-800 text-sm cursor-pointer hover:bg-gray-200 transition-colors';
+                    playerItem.textContent = `${player.pos} | ${player.team} | ${player.name}`;
+                    playerItem.addEventListener('click', (e) => {
+                         // Find the first empty pick on the board
+                        const emptyPick = document.querySelector('.player-input[value=""]');
+                        if (emptyPick) {
+                            emptyPick.value = player.name;
+                            const pickId = emptyPick.id;
+                            draftedPlayers[pickId] = player.name;
+                            saveDraft();
+                            renderAvailablePlayers(searchInputEl.value); // Re-render the list
+                        }
+                    });
+                    playersListEl.appendChild(playerItem);
+                });
+            }
+        }
+
+        // --- Draft Board Generation ---
+
+        /**
+         * Generates the entire draft board structure in a grid layout.
+         */
+        function renderDraftBoard() {
+            draftBoardEl.innerHTML = '';
+            
+            // Start with a clean slate and apply the keepers
+            localStorage.removeItem(DRAFT_BOARD_KEY);
+            draftedPlayers = { ...KEEPERS };
+
+            // Create the top row for teams
+            const emptyCorner = document.createElement('div');
+            emptyCorner.className = 'grid-header';
+            draftBoardEl.appendChild(emptyCorner);
+            
+            TEAMS.forEach((team, index) => {
+                const teamHeader = document.createElement('div');
+                teamHeader.className = 'grid-header text-sm md:text-base';
+                teamHeader.innerHTML = `<div>${team}</div><div class="pick-number">#${index + 1}</div>`;
+                draftBoardEl.appendChild(teamHeader);
+            });
+
+            // Create rows for each round
+            for (let round = 1; round <= NUM_ROUNDS; round++) {
+                // Add the round number header cell
+                const roundHeader = document.createElement('div');
+                roundHeader.className = 'round-header font-bold';
+                roundHeader.textContent = round;
+                draftBoardEl.appendChild(roundHeader);
+
+                const teamOrder = getRoundOrder(round);
+                const pickDirection = (round % 2 === 1) ? 'forward' : 'backward';
+                let startPick = (round - 1) * TEAMS.length + 1;
+
+                teamOrder.forEach((team, index) => {
+                    let pickNumber;
+                    if (pickDirection === 'forward') {
+                        pickNumber = startPick + index;
+                    } else {
+                        pickNumber = startPick + (TEAMS.length - 1) - index;
+                    }
+                    const pickId = `pick-${pickNumber}`;
+                    const draftedPlayerName = draftedPlayers[pickId] || '';
+                    const owningTeam = TRADED_PICKS[pickId];
+                    const owningTeamName = owningTeam ? getAbbreviatedTeamName(owningTeam) : '';
+
+                    // Create cell for the pick
+                    const pickCell = document.createElement('div');
+                    // Add alternating background color
+                    if ((round + index) % 2 === 0) {
+                        pickCell.className = 'grid-cell alt-bg';
+                    } else {
+                        pickCell.className = 'grid-cell';
+                    }
+                    
+                    let cellContent = `<div class="cell-pick-number">${pickNumber}</div>`;
+                    cellContent += `<input type="text" id="trade-${pickId}" class="owning-team" value="${owningTeamName}">`;
+                    cellContent += `<input type="text" id="${pickId}" class="player-input" placeholder="" value="${draftedPlayerName}">`;
+                    pickCell.innerHTML = cellContent;
+                    draftBoardEl.appendChild(pickCell);
+                });
+            }
+
+            // Attach event listeners for saving draft on input change
+            document.querySelectorAll('.player-input').forEach(input => {
+                input.addEventListener('input', (e) => {
+                    draftedPlayers[e.target.id] = e.target.value;
+                    saveDraft();
+                });
+            });
+
+            // Attach event listeners for saving trade picks
+            document.querySelectorAll('.owning-team').forEach(input => {
+                input.addEventListener('input', (e) => {
+                    const pickId = e.target.id.replace('trade-', '');
+                    TRADED_PICKS[pickId] = e.target.value;
+                    // A more robust solution would be to save this data to local storage as well.
+                });
+            });
+        }
+
+        /**
+         * Calculates the snake draft order for a given round.
+         * @param {number} round The current round number.
+         * @returns {string[]} An array of team names in draft order.
+         */
+        function getRoundOrder(round) {
+            let order = [...TEAMS];
+            if (round % 2 === 0) { // Snake draft reverses on even rounds
+                order.reverse();
+            }
+            return order;
+        }
+
+        // --- Local Storage Management ---
+
+        /**
+         * Saves the current draft board data to local storage.
+         */
+        function saveDraft() {
+            localStorage.setItem(DRAFT_BOARD_KEY, JSON.stringify(draftedPlayers));
+            showMessage('Draft progress saved!');
+        }
+
+        /**
+         * Loads draft board data from local storage.
+         */
+        function loadDraft() {
+            const savedData = localStorage.getItem(DRAFT_BOARD_KEY);
+            if (savedData) {
+                draftedPlayers = JSON.parse(savedData);
+                renderDraftBoard();
+                showMessage('Draft loaded successfully!');
+            } else {
+                showMessage('No saved draft found.', 4000);
+            }
+        }
+
+        // --- Event Listeners ---
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderDraftBoard();
+            initializePlayerList();
+            renderAvailablePlayers();
+            
+            // Attach event listeners to buttons
+            saveBtn.addEventListener('click', saveDraft);
+            loadBtn.addEventListener('click', loadDraft);
+            
+            // Attach event listener for search input
+            let searchTimeout;
+            searchInputEl.addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    renderAvailablePlayers(e.target.value);
+                }, 300); // Debounce for better performance
+            });
+        });
+
+    </script>
+</body>
+</html>
