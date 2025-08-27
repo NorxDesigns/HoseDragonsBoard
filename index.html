@@ -834,12 +834,7 @@
                 let startPick = (round - 1) * TEAMS.length + 1;
 
                 teamOrder.forEach((team, index) => {
-                    let pickNumber;
-                    if (pickDirection === 'forward') {
-                        pickNumber = startPick + index;
-                    } else {
-                        pickNumber = startPick + (TEAMS.length - 1) - index;
-                    }
+                    let pickNumber = startPick + index;
                     const pickId = `pick-${pickNumber}`;
                     const draftedPlayerName = draftedPlayers[pickId] || '';
                     const owningTeam = TRADED_PICKS[pickId];
